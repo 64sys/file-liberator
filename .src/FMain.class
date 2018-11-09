@@ -1,0 +1,174 @@
+' Gambas class file
+
+'
+' Conversor de archivos
+' Interface para facilitar la conversion de archivos.
+'
+' Copyright (C) Martín Belmonte
+'
+' This program is free software; you can redistribute it and/or modify
+' it under the terms of the GNU General Public License as published by
+' the Free Software Foundation; either version 2 of the License, or
+' (at your option) any later version.
+'
+' This program is distributed in the hope that it will be useful,
+' but WITHOUT ANY WARRANTY; without even the implied warranty of
+' MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+' GNU General Public License for more details.
+'
+' You should have received a copy of the GNU General Public License
+' along with this program; if not, write to the Free Software
+' Foundation, Inc., 51 Franklin St, Fifth Floor,
+' Boston, MA  02110-1301  USA
+'
+
+Public strFile As String
+Public strOutFile As String
+Public info As New Collection
+Private bolPreload As Boolean
+Public ctn As New Collection
+Public strBlank As String
+Public strProc As String
+Public strInfo As String
+Public strFinished As String
+Public intTask As Integer
+Public intProgress As Integer
+Private lbl As Label
+
+Public Sub Form_Open()
+
+  strBlank = ("Sin archivo que procesar, arrastre y suelte uno en el botón para comenzar")
+  ToolButton1.Picture = Image.Load("./logo.png").Stretch(48, 48).Picture
+  TextLabel1.Text = strBlank
+  intTask = 0
+  intProgress = 0
+
+End
+
+Public Sub ToolButton1_Drop()
+
+  Dim strUrl As String
+  Dim strExt As String
+  Dim pic As Picture
+
+  bolPreload = False
+
+  strUrl = GEFUtility.ArrangePath((Drag.Paste("text/uri-list")))
+
+  strUrl = Replace(strUrl, "file://", "")
+  If InStr(strUrl, "%20") > 0 Then
+    strUrl = GEFValidator.ConvertPath(strUrl)
+  Endif
+
+  If Exist(strUrl) Then
+    strFile = strUrl
+
+    strExt = String.LCase(File.Ext(strFile))
+
+    pic = DesktopMime.FromFile(strFile).GetIcon(48).Picture
+
+    ToolButton1.Picture = Null
+    ToolButton1.Picture = pic
+    ToolButton1.Refresh
+
+    Select strExt
+
+      Case "pdf"
+        strProc = ("Ha selecionado un archivo") & " PDF " & ("para optimizarlo presione el botón")
+        info = GEFUtility.FileInfo(strFile)
+
+        TextLabel1.Text = strProc
+        TextLabel1.Refresh
+        intTask = 1
+        strInfo = info["FileVersion"]
+
+        pnlOptions.Children.Clear
+        lbl = New Label(pnlOptions) As "info"
+        lbl.Expand = True
+        lbl.Text = strInfo
+        lbl.Refresh
+
+      Case "mdb", "accdb"
+        info = GEFBatch.MDBInfo(strFile)
+
+        If info Then
+
+          strProc = ("Ha selecionado un archivo de datos") & " " & info["Version"] & " " & ("para convertir a") & " SQLite " & ("presione el botón")
+          TextLabel1.Text = strProc
+          TextLabel1.Refresh
+          intTask = info["Tables"].Count + 2
+          strInfo = "Tables: " & info["Tables"].Count
+
+          pnlOptions.Children.Clear
+          lbl = New Label(pnlOptions) As "info"
+          lbl.Expand = True
+          lbl.Text = strInfo
+          lbl.Refresh
+
+        Endif
+    End Select
+  Else
+    strFile = ""
+  Endif
+
+  bolPreload = True
+
+End
+
+Public Sub ToolButton1_Click()
+
+  Dim tbl As String
+
+  ctn.Clear
+
+  If bolPreload = True Then
+    Select String.LCase(File.Ext(strFile))
+      Case "pdf"
+        strOutFile = GEFBatch.PDFOptimize(strFile)
+
+      Case "mdb", "accdb"
+        ProgressBar1.Value = 0
+        Inc Application.Busy
+
+        ctn = GEFBatch.MDBtoSQL(strFile)
+        If Exist(User.Home &/ ".databases" &/ ctn["SQLiteFile"]) = True Then
+          Shell "rm " & User.Home &/ ".databases" &/ ctn["SQLiteFile"]
+        Endif
+        Inc intProgress
+        ProgressBar1.Value = intProgress / intTask
+        Wait 0.01
+        ProgressBar1.Refresh
+        Me.Refresh
+
+        GEFBatch.SQLtoSqlite(User.Home &/ ".databases" &/ ctn["SQLiteFile"], ctn["JobDir"] &/ File.BaseName(ctn["SQLiteFile"]) & "-sch-sqlite.sql")
+        Inc intProgress
+        ProgressBar1.Value = intProgress / intTask
+        Wait 0.01
+        ProgressBar1.Refresh
+        Me.Refresh
+
+        For Each tbl In ctn["Tables"]
+          lbl.Text = tbl
+          lbl.Refresh
+          GEFBatch.SQLtoSqlite(User.Home &/ ".databases" &/ ctn["SQLiteFile"], ctn["JobDir"] &/ tbl & "-data.sql")
+          Inc intProgress
+          ProgressBar1.Value = intProgress / intTask
+          Wait 0.01
+          ProgressBar1.Refresh
+          Me.Refresh
+        Next
+        intProgress = intTask
+
+        strOutFile = ctn["SQLiteFile"]
+
+        strFinished = ("Archivo convertido")
+        lbl.Text = strFinished
+        lbl.Refresh
+
+        ProgressBar1.Value = 1
+        Dec Application.Busy
+
+    End Select
+  Endif
+
+End

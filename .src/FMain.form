@@ -1,0 +1,32 @@
+# Gambas Form File 3.0
+
+{ Form Form
+  MoveScaled(0,0,54,19)
+  Arrangement = Arrange.Horizontal
+  Padding = 4
+  { ToolButton1 ToolButton
+    MoveScaled(1,1,18,17)
+    ToolTip = ("Suelte aqui los archivos")
+    Drop = True
+    Picture = Picture["icon:/64/refresh"]
+    Border = True
+  }
+  { Panel1 Panel
+    MoveScaled(20,1,29,17)
+    Expand = True
+    Arrangement = Arrange.Vertical
+    Padding = 4
+    { TextLabel1 TextLabel
+      MoveScaled(1,1,26,6)
+      Expand = True
+      Padding = 4
+    }
+    { pnlOptions Panel
+      MoveScaled(1,8,27,4)
+      Arrangement = Arrange.Horizontal
+    }
+    { ProgressBar1 ProgressBar
+      MoveScaled(2,13,24,3)
+    }
+  }
+}

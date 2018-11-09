@@ -1,0 +1,386 @@
+' Gambas module file
+
+'
+' Conversor de archivos
+' Interface para facilitar la conversion de archivos.
+'
+' Copyright (C) Martín Belmonte
+'
+' This program is free software; you can redistribute it and/or modify
+' it under the terms of the GNU General Public License as published by
+' the Free Software Foundation; either version 2 of the License, or
+' (at your option) any later version.
+'
+' This program is distributed in the hope that it will be useful,
+' but WITHOUT ANY WARRANTY; without even the implied warranty of
+' MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+' GNU General Public License for more details.
+'
+' You should have received a copy of the GNU General Public License
+' along with this program; if not, write to the Free Software
+' Foundation, Inc., 51 Franklin St, Fifth Floor,
+' Boston, MA  02110-1301  USA
+'
+
+Public Function PDFOptimize(strPath As String, Optional strOut As String) As String '' Devuelve la ruta del archivo de tamaño reducido. Para reducir el PDF usa Ghostcript
+
+  Dim strCommand As String
+  Dim prsCommand As Process
+
+  Select strOut
+    Case ""
+      strOut = File.Dir(strPath) &/ File.BaseName(strPath) & "-shrink.pdf"
+  End Select
+
+  strCommand = "gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/screen -dNOPAUSE -dQUIET -dBATCH -sOutputFile='"
+  strCommand &= strOut & "' -c .setpdfwrite -f '" & strPath & "'"
+
+  prsCommand = Shell strCommand
+
+  While prsCommand.State = prsCommand.Running
+    Wait 0.05
+  Wend
+
+  If Exist(strOut) Then
+
+  Endif
+
+  If Exist(strOut) Then
+
+    If Stat(strOut).Type = gb.File Then
+      Return strOut
+    Else
+      Return ""
+    Endif
+  Else
+    Return ""
+  Endif
+
+End
+
+Public Function SQLtoSqlite(strFile As String, strSQL As String) As Integer '' Crea un archivo .sqlite en base a los archivos .sql que se le pasan como parametros en forma de coleccion con el directorio donde se encuentran etc.
+
+  Dim command As String
+
+  command = "sqlite3 " & strFile & " < " & strSQL
+  'command = "sqlite3 -batch " & strFile & " " & sqlSentence
+  Print command
+
+  Shell command Wait
+
+  If Exist(strFile) Then
+    Return Stat(strFile).Size
+  Else
+    Return 0
+  Endif
+
+End
+
+Public Function SchemaArrange(str As String, type As String) As String '' Acomoda el texto de la sentencia SQL generada por MDBtools para que no de error al momento de crear la base de datos.
+
+  Dim strOut As String
+  Dim stx As New String[]
+  Dim strFkey As String
+  Dim stxTmp As New String[]
+  Dim stxFkey As New String[]
+  Dim strLine As String
+  Dim strTable As String
+  Dim stxQtab As New String[]
+  Dim intX As Integer
+  Dim strTableMark As String
+  Dim strFkeySentence As String
+  Dim bolAdd As Boolean
+  Dim intY As Integer
+
+  Select type
+    Case "sqlite3"
+      ''Obteniendo todas las claves foráneas
+      stx = Split(str, "\n")
+      For Each strLine In stx
+        If String.Len(strLine) > 13 Then
+          Select String.Mid(strLine, 1, 13)
+            Case "ALTER TABLE `"
+              If InStr(strline, "FOREIGN KEY") > 0 Then
+                If InStr(strline, "REFERENCES") > 0 Then
+                  strFkey = Replace(strline, ";", "")
+                  strTable = Split(strline, "`")[1]
+
+                  strFkey = String.Mid(strFkey, InStr(strline, "FOREIGN KEY"))
+                  stxFkey.Add(strTable & "\t" & strFkey)
+                Endif
+              Endif
+            Case "-- Relationsh"
+              If InStr(strline, "does not enforce integrity") > 0 Then
+                strFkey = Replace(strline, "-- Relationship from `", "")
+                strFkey = Replace(strFkey, "` (`", ":")
+                strFkey = Replace(strFkey, "`) to `", ":")
+                strFkey = Replace(strFkey, "`(`", ":")
+                strFkey = Replace(strFkey, "`) does not enforce integrity.", "")
+                stxTmp = Split(strFkey, ":")
+                strFkey = "FOREIGN KEY (`" & stxTmp[1] & "`) REFERENCES `" & stxTmp[2] & "`(`" & stxTmp[3] & "`)"
+                stxFkey.Add(stxTmp[0] & "\t" & strFkey)
+              Endif
+          End Select
+        Endif
+      Next
+      stxFkey.Sort
+      '' Regenerando el SQL de creacion de BD
+      For intY = 0 To stx.Max
+
+        If String.Mid(stx[intY], 1, String.Len("CREATE TABLE `")) = "CREATE TABLE `" Then
+          strTableMark = Split(stx[intY], "`")[1]
+          bolAdd = True
+
+          ' Comienzo de la sentencia de creacuion de tabla
+          stxQtab.Add(stx[intY])
+          For intX = intY + 1 To stx.Max
+            Select stx[intX]
+              Case ");"
+                stxQtab[stxQtab.Max] = stxQtab[stxQtab.Max] & ","
+                For Each strFkeySentence In stxFkey
+                  If Split(strFkeySentence, "\t")[0] = strTableMark Then
+                    stxQtab.Add(Split(strFkeySentence, "\t")[1] & ",")
+                  Endif
+                Next
+                stxQtab[stxQtab.Max] = Replace(stxQtab[stxQtab.Max], ",", "")
+                stxQtab.Add(stx[intX])
+                bolAdd = False
+                Break
+              Case Else
+                If bolAdd = True Then
+                  stxQtab.Add(stx[intX])
+                Endif
+            End Select
+          Next
+          ' Agregando al texto de salida la sentencia de creacion de la tabla
+          strOut &= stxQtab.Join("\n") & "\n"
+          'Busqueda de la siguiente tabla
+          stxQtab.Clear
+          intY = intX + 1
+        Endif
+
+      Next
+
+  End Select
+  strOut = Replace(strOut, "varchar", "TEXT")
+  Return strOut
+
+End
+
+Public Function MDBInfo(strFile As String) As Collection '' Da unos brebes datos sobre el archivo que se le pasa la ruta.
+
+  Dim ctn As New Collection
+  Dim strVer As String
+  Dim strTables As String
+
+  Shell "mdb-ver '" & strFile & "'" To strVer
+  Shell "mdb-tables -1 '" & strFile & "'" To strTables
+
+  ctn.Add(strVer, "Version")
+
+  If InStr(strTables, "\n") > 0 Then
+    ctn.Add(Split(strTables, "\n"), "Tables")
+  Else
+
+    ctn.Add([strTables], "Tables")
+  Endif
+
+  Return ctn
+
+End
+
+Public Function MDBtoSQL(strFilePath As String) As Collection ''Extraccion de tablas de bases de datos .mdb y .accdb usando mdbtools. Como parametro de entrada requiere la ruta completa del archivo. Las dependencias son: mdbtools.
+
+  Dim strTools As String
+  Dim strPkg As String
+  Dim strStatVersion As String
+  Dim strStatTables As String
+  Dim strStatTable As String
+  Dim intW, intQtyTb, intBytes As Integer
+  Dim stxStatTablesTmp As New String[]
+  Dim stxStatTables As New String[]
+  Dim stxStatFieldsTmp As New String[]
+  Dim strStatFieldLine As String
+  Dim strStatFieldsTable As String
+  Dim strStatFieldsTitle As String
+  Dim strStatFieldsType As String
+  Dim stxStatFields As New String[]
+  Dim stxDatabaseInfo As New String[]
+  Dim strJobName As String
+  Dim strJobPath As String ' Directorio de trabajo en Home
+  Dim strFinalPath As String ' Directorio de destino para el sqlite generado
+  Dim strFileExt As String ' Archivo de esxtraccion en bruto
+  Dim strFileSQL As String ' Archivo con la sentencia sql listo para importar
+  Dim prsQ1, prsQ2, prsQ3 As Process
+  Dim prsA, prsB, prsC As Process
+  Dim strFilePathPerm As String
+
+  Dim ctn As New Collection
+  Dim strChecked As String
+
+  stxStatTablesTmp.Clear
+  stxStatTables.Clear
+  stxStatFieldsTmp.Clear
+  stxStatFields.Clear
+  stxDatabaseInfo.Clear
+
+  ' Primera verificación ¿El paquete mdbtools esta instalado en el sistema?
+  strPkg = "mdbtools"
+  strTools = GEFSys.PkgStat(strPkg)
+
+  ' Es el nombre de la base de datos sin el .mdb o .accdb
+  strJobName = String.LCase(File.BaseName(strFilePath))
+  strJobName = Replace(strJobName, " ", "-")
+  strJobName = Replace(strJobName, "--", "-")
+
+  strFilePathPerm = Stat(File.Dir(strFilePath)).Perm[User.Name]
+
+  strJobPath = User.Home &/ ".databases" &/ strJobName
+
+  Select InStr(strFilePathPerm, "w") ' Verificacion de que existe permisos de escritura
+    Case 0 ' No se tienen permisos de escritura > se escoge el directorio home del usuario
+      strFinalPath = strJobPath
+    Case Else
+      strFinalPath = File.Dir(strFilePath)
+  End Select
+
+  'Print strJobPath
+
+  If Exist(strJobPath) = False Then
+    Shell "mkdir -p '" & strJobPath & "'"
+  Endif
+
+  'Extracción de los nombres de las tablas
+  Shell "mdb-ver '" & strFilePath & "' 2>&1" To strStatVersion
+  strStatVersion = Replace(strStatVersion, "\n", "")
+
+  'Print strStatVersion
+
+  Shell "mdb-tables -S -1 '" & strFilePath & "' 2>&1" To strStatTables
+
+  'Extracción de esquemas
+  prsQ1 = Shell "mdb-schema '" & strFilePath & "' postgres > '" & strJobPath &/ strJobName & "-sch-postgres.sql'"
+  ctn.Add(strJobName & "-sch-postgres.sql", "SQLSchFile")
+  While prsQ1.State = prsQ1.Running
+    Wait 0.1
+  Wend
+
+  prsQ2 = Shell "mdb-schema '" & strFilePath & "' mysql > '" & strJobPath &/ strJobName & "-sch-mysql.sql'"
+  ctn.Add(strJobName & "-sch-mysql.sql", "SQLSchFile")
+  While prsQ2.State = prsQ2.Running
+    Wait 0.1
+  Wend
+
+  prsQ3 = Shell "mdb-schema '" & strFilePath & "' sqlite > '" & strJobPath &/ strJobName & "-sch-sqlite-raw.sql'"
+  ctn.Add(strJobName & "-sch-sqlite.sql", "SQLSchFile")
+
+  While prsQ3.State = prsQ3.Running
+    Wait 0.1
+  Wend
+  'Corrigiendo el sql generado por mdbtools para crear el .sqlite
+  strChecked = SchemaArrange(File.Load(strJobPath &/ strJobName & "-sch-sqlite-raw.sql"), "sqlite3")
+
+  File.Save(strJobPath &/ strJobName & "-sch-sqlite.sql", strChecked)
+
+  stxStatFieldsTmp = Split(File.Load(strJobPath &/ strJobName & "-sch-postgres.sql"), "\n")
+
+  For Each strStatFieldLine In stxStatFieldsTmp
+
+    Select String.Mid(strStatFieldLine, 1, 2)
+      Case "CR" ' Comienzo de la tabla
+        strStatFieldsTable = Split(strStatFieldLine, Chr(34))[1]
+      Case "\t" & Chr(34) ' Nombre y tipo de campo
+
+        strStatFieldsTitle = Split(strStatFieldLine, Chr(34))[1]
+        strStatFieldsType = Split(strStatFieldLine, Chr(34))[2]
+        strStatFieldsType = Replace(strStatFieldsType, ",", "")
+        strStatFieldsType = Replace(strStatFieldsType, "\t", "")
+
+        stxStatFields.Add(strStatFieldsTable & "." & strStatFieldsTitle & "." & strStatFieldsType)
+
+    End Select
+
+  Next
+
+  File.Save(strJobPath &/ "fields.txt", stxStatFields.Join("\n"))
+
+  'Extracción de los nombres de las tablas
+  prsA = Shell "mdb-tables -S -1 '" & strFilePath & "' > '" & strJobPath &/ "tables.txt'"
+
+  While prsA.State = prsA.Running
+    Wait 0.1
+  Wend
+
+  'Filtrado y ordenamiento de la lista de tablas
+  If strStatTables <> "" Then
+
+    stxStatTablesTmp = Split(strStatTables, "\n")
+    stxStatTablesTmp.Sort
+
+    'Agregado a la matriz de la version de la base de datos [0]
+    stxDatabaseInfo.Add(strStatVersion)
+    ctn.Add(strStatVersion, "DatabaseType")
+
+    ' Ordenamiento de las tablas
+    For intW = 0 To stxStatTablesTmp.Max
+      strStatTable = stxStatTablesTmp[intW]
+      If Mid(strStatTable, 1, 4) <> "MSys" Then
+        If strStatTable <> "" Then
+          If InStr(strStatTable, " ") = 0 Then
+            stxStatTables.Add(strStatTable)
+          Endif
+        Endif
+      Endif
+    Next
+  Endif
+  ' Agregado a la matriz de la cantidad de tablas [1]
+  intQtyTb = stxStatTables.Count
+  stxDatabaseInfo.Add(Str(intQtyTb))
+  ctn.Add(intQtyTb, "TablesQty")
+
+  ' Agregado a la matriz de la cantidad de tablas [2]
+  intBytes = Stat(strFilePath).Size
+  stxDatabaseInfo.Add(Str(intBytes))
+  ctn.Add(intBytes, "FileSize")
+
+  ' Agregado a la matriz del directorio de trabajo [3]
+  stxDatabaseInfo.Add(strJobPath)
+  ctn.Add(strJobPath, "JobDir")
+
+  ' Agregado a la matriz el nombre del .sqlite [4]
+  stxDatabaseInfo.Add(strJobName & ".sqlite")
+  ctn.Add(strJobName & ".sqlite", "SQLiteFile")
+
+  ' Agregado a la matriz del directorio de destino [5]
+  stxDatabaseInfo.Add(strFinalPath)
+  ctn.Add(strFinalPath, "DestinationDir")
+
+  ' Agregado a la matriz de la cantidad de tablas [6:X]
+  ctn.Add(stxStatTables, "Tables")
+  For Each strStatTable In stxStatTables
+    stxDatabaseInfo.Add(strStatTable)
+    strFileExt = strJobPath &/ strStatTable & ".tmp"
+    strFileSQL = strJobPath &/ strStatTable & "-data.sql"
+    prsB = Shell "mdb-export -D %Y%m%d%H%M%S -H -b strip -R '::rrr::' -d '::ccc::' " & strFilePath & " " & strStatTable & " > " & strFileExt
+    'Exec ["notify-send", "-t", "2000", ("Sistema"), ("Extrayendo datos de") & " " & strStatTable]
+    While prsB.State = prsB.Running
+      Wait 0.1
+    Wend
+
+    prsC = Shell "tr -cd '[:print:]' < " & strFileExt & " | tr -s ' ' | sed 's/\\d96//g' | sed 's/\\d39//g' | sed 's/,/~/g' | sed 's/\\d34/\\d39/g'  | sed 's/::ccc::::ccc::/::ccc::\\d39\\d39::ccc::/g' | sed 's/::ccc::::ccc::/::ccc::\\d39\\d39::ccc::/g' | sed 's/::ccc::::ccc::/::ccc::\\d39\\d39::ccc::/g' | sed 's/::rrr::/\\n/g' | sed '/^$/d' | sed -e 's/^/INSERT INTO `" & strStatTable & "` VALUES (/' | sed 's/.*/&);/' | sed 's/::ccc::\\d41;/::ccc::\\d39\\d39\\d41;/g' | sed 's/::ccc::/,/g' > " & strFileSQL
+    'Exec ["notify-send", "-t", "2000", ("Sistema"), ("Formateando datos de") & " " & strStatTable]
+    While prsC.State = prsC.Running
+
+      Wait 0.1
+    Wend
+
+  Next
+
+  'Exec ["notify-send", "-t", "2000", ("Sistema"), ("Base de datos completada")]
+
+  ' Extraccion de los archivos csv de las tablas
+  File.Save(strJobPath &/ "tables.txt", stxStatTables.Join("\n"))
+
+  Return ctn 'stxDatabaseInfo
+
+End

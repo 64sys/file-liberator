@@ -1,0 +1,76 @@
+' Gambas module file
+
+'
+' Conversor de archivos
+' Interface para facilitar la conversion de archivos.
+'
+' Copyright (C) Martín Belmonte
+'
+' This program is free software; you can redistribute it and/or modify
+' it under the terms of the GNU General Public License as published by
+' the Free Software Foundation; either version 2 of the License, or
+' (at your option) any later version.
+'
+' This program is distributed in the hope that it will be useful,
+' but WITHOUT ANY WARRANTY; without even the implied warranty of
+' MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+' GNU General Public License for more details.
+'
+' You should have received a copy of the GNU General Public License
+' along with this program; if not, write to the Free Software
+' Foundation, Inc., 51 Franklin St, Fifth Floor,
+' Boston, MA  02110-1301  USA
+'
+
+Public Function ConvertPath(strInput As String) As String ''Descodifica los caracteres hexadecimales en las URI's recorriendo la cadena dada Params: strInput la URintPos a descodificar Return: la URintPos descodificada
+  '----------------------------------------------------------------------
+  'http://www.gambas-es.org/viewtopic.php?f=1&t=2054&postdays=0&postorder=asc&start=10
+  '----------------------------------------------------------------------
+  '
+
+  Dim intLen As Integer
+  Dim intPos As Integer
+  Dim strChar As String
+  Dim strDigits As String
+  Dim strOutput As String
+
+  strOutput = ""
+  intLen = Len(strInput)
+  intPos = 1
+  Do While intPos <= intLen
+    ' Examinar el siguiente caracter
+    strChar = Mid$(strInput, intPos, 1)
+    If strChar = "+" Then
+      strOutput = strOutput & strChar
+    Else If strChar <> "%" Then
+      ' Normal, no cambiar
+      strOutput = strOutput & strChar
+    Else If intPos > intLen - 2 Then
+      strOutput = strOutput & strChar
+    Else
+      ' Obtener los siguientes caracteres hex.
+      strDigits = Mid$(strInput, intPos + 1, 2)
+      ' aquí convertimos el valor hexadecimal a entero y
+      ' se lo pasamos a Chr que devuelve el carácter correcto.
+      strOutput = strOutput & Chr$(CInt(Val("&" & strDigits)))
+      intPos = intPos + 2
+    Endif
+    intPos = intPos + 1
+  Loop
+
+  Return strOutput
+
+End
+
+Public Function RSpaces(str As String) As String ''Remueve los espacios al inicio y al final de una cadena y si entre el inicio y e l final hay espacios repetidos los convierte en uno solo.
+
+  Dim strRemoved As String
+
+  strRemoved = Trim(RTrim(str))
+  While InStr(strRemoved, "  ")
+    strRemoved = Replace(strRemoved, "  ", " ")
+  Wend
+
+  Return strRemoved
+
+End

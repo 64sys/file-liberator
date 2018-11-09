@@ -1,0 +1,508 @@
+' Gambas module file
+
+'
+' Conversor de archivos
+' Interface para facilitar la conversion de archivos.
+'
+' Copyright (C) Martín Belmonte
+'
+' This program is free software; you can redistribute it and/or modify
+' it under the terms of the GNU General Public License as published by
+' the Free Software Foundation; either version 2 of the License, or
+' (at your option) any later version.
+'
+' This program is distributed in the hope that it will be useful,
+' but WITHOUT ANY WARRANTY; without even the implied warranty of
+' MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+' GNU General Public License for more details.
+'
+' You should have received a copy of the GNU General Public License
+' along with this program; if not, write to the Free Software
+' Foundation, Inc., 51 Franklin St, Fifth Floor,
+' Boston, MA  02110-1301  USA
+'
+
+Public Function DirParent(strPath As String) As String  ''Devuelve el directorio padre de otro que se pasa como parámetro.
+
+  Dim strParent As String
+  Dim intLast As Integer
+
+  If strPath <> "" Then
+    intLast = String.RInStr(strPath, "/")
+    strParent = String.Mid(strPath, 1, intLast)
+    If String.Len(strParent) > 1 Then
+      If String.Right(strParent) = "/" Then
+        strParent = String.Mid(strParent, 1, String.Len(strParent) - 1)
+
+      Endif
+    Endif
+  Endif
+
+  If Exist(strParent) = False Then
+    strParent = "-1"
+  Else
+    If Stat(strParent).Type <> gb.Directory Then
+      strParent = "-1"
+    Endif
+  Endif
+
+  Return strParent
+
+End
+
+Public Function DirBase(strPath As String) As String  ''Devuelve el directorio sin la ruta hasta el mismo, es decir devuelve el nombre del directorio. si se pasa "/home/usuario/musica" devolvera "musica"
+
+  Dim strBase As String
+  Dim stx As New String[]
+
+  If InStr(strPath, "/") > 0 Then
+    stx = Split(strPath, "/")
+    strBase = stx[stx.Max]
+  Endif
+
+  Return strBase
+
+End
+
+Public Function CodeStructure() As String[] ''Crea una matriz con las estructuras del lenguaje gambas que, por ejemplo, puede servir para iterpretar el código.
+
+  Dim stxStructure As New String[]
+  ' "X#Function #As " X es el primer caracter de comienzo de la línea de código
+
+  stxStructure.Add("F#Function #Method Start")
+  stxStructure.Add("S#Sub #Method Start")
+  stxStructure.Add("S#Sub #) As #Method Start")
+  stxStructure.Add("E#End#Method End")
+  stxStructure.Add(" #Dim #As #Variable Local")
+  stxStructure.Add("P#Public # As #Variable Public")
+  stxStructure.Add("P#Private # As #Variable Private")
+  stxStructure.Add("P#Public #Function #) As #Method Start")
+  stxStructure.Add("P#Private #Function #) As #Method Start")
+  stxStructure.Add("'#'#Commentary 1")
+  stxStructure.Add("'#''#Commentary 2")
+  stxStructure.Add("##Blank Line")
+  stxStructure.Add(" #If #Then#Conditional structure Start")
+  stxStructure.Add(" #If #Then #Break#Conditional structure Start-End")
+  stxStructure.Add(" #Else#Conditional structure Middle")
+  stxStructure.Add(" #Endif#Conditional structure End")
+  stxStructure.Add(" #For #To #Loop Control Start")
+  stxStructure.Add(" #For #To #Step #Loop Control Start")
+  stxStructure.Add(" #For #Each #Loop Control Start")
+  stxStructure.Add(" #For #Each #In #Loop Control Start")
+  stxStructure.Add(" #Repeat#Loop Control Start")
+  stxStructure.Add(" #Do #While #Loop Control Start")
+  stxStructure.Add(" #While #Loop Control Start")
+  stxStructure.Add(" #Do#Loop Control Start")
+
+  stxStructure.Add(" #Continue#Loop Control Middle")
+  stxStructure.Add(" #Next#Loop Control End")
+  stxStructure.Add(" #Loop#Loop Control End")
+  stxStructure.Add(" #Until#Loop Control End")
+  stxStructure.Add(" #Wend#Loop Control End")
+
+  stxStructure.Add(" #Inc #Increment")
+
+  stxStructure.Add(" #Wait #Wait")
+
+  stxStructure.Add(" #Select #Select Control Start")
+  stxStructure.Add(" #Select Case #Select Control Start")
+  stxStructure.Add(" #Case #Select Control Middle")
+  stxStructure.Add(" #End Select#Select Control End")
+  'Stream & Input/Output functions
+  stxStructure.Add(" #Open # For Input#Open Stream")
+  stxStructure.Add(" #Open # For Read#Open Stream")
+  stxStructure.Add(" #Open # For Write#Open Stream")
+  stxStructure.Add(" #Open # For Output#Open Stream")
+  stxStructure.Add(" #Open # For Create#Open Stream")
+  stxStructure.Add(" #Open # For Append#Open Stream")
+  stxStructure.Add(" #Open # For Watch#Open Stream")
+  stxStructure.Add(" #Print #Print")
+  ' Faltan mas estructuras
+  stxStructure.Add(" #Close #Close Stream")
+  stxStructure.Add(" #Kill #Shell Command")
+  stxStructure.Add(" #Shell #Shell Command")
+  stxStructure.Add(" #Shell #To #Shell Command")
+  stxStructure.Add(" #Move #Shell Command")
+  stxStructure.Add(" #Copy #Shell Command")
+  stxStructure.Add(" #Catch#Error Catch")
+  stxStructure.Add(" #Try #Error Try")
+  stxStructure.Add(" #Return #Method Middle")
+
+  Return stxStructure
+
+End
+
+Public Function CodeMthod(stxPart As String[]) As String[]
+
+  Dim intPart As Integer
+  Dim stxFunc As New String[]
+  Dim strFast As String
+  Dim strMode As String
+  Dim strScope As String
+  Dim strType As String
+  Dim strName As String
+  Dim stxMethd As New String[]
+  Dim strDesc As String
+  Dim strRetn As String
+  Dim strArgs As String
+  Dim stxArgs As New String[]
+  Dim strExtr As String
+  Dim strTemp As String
+  Dim intRetn As Integer
+  Dim intDesc As Integer
+
+  intRetn = 0
+  For intPart = 0 To stxPart.Max
+
+    Select intPart
+      Case 0
+        strTemp = Split(stxPart[0], "\t")[1]
+
+        stxFunc = Split(strTemp, " ")
+
+        If stxFunc.Find("Fast") > -1 Then
+          strFast = "Fast"
+        Else
+          strFast = ""
+        Endif
+
+        If stxFunc.Find("Static") > -1 Then
+          strMode = "Static"
+        Else
+          strMode = ""
+        Endif
+
+        If stxFunc.Find("Public") > -1 Then
+          strScope = "Public"
+        Else
+          If stxFunc.Find("Private") > -1 Then
+            strScope = "Private"
+          Else
+            strScope = "Other"
+          Endif
+        Endif
+
+        If stxFunc.Find("Function") > -1 Then
+          strType = "Function"
+        Else
+          If stxFunc.Find("Procedure") > -1 Then
+            strType = "Procedure"
+          Else
+            If stxFunc.Find("Sub") > -1 Then
+              strType = "Sub"
+            Endif
+          Endif
+        Endif
+        strName = stxFunc[stxFunc.Max]
+        ' ---------------
+      Case 1
+        strArgs = Replace(stxPart[1], ", ", "#")
+        strArgs = Replace(strArgs, " As ", "~")
+        If InStr(strArgs, "#") > 0 Then
+          stxArgs = Split(strArgs, "#") ' intArg1>Integer#strArg2>String
+        Else
+          If InStr(strArgs, "~") > 0 Then
+            stxArgs.Add(strArgs)
+          Endif
+        Endif
+        ' ---------------
+      Case 2
+        strExtr = Replace(stxPart[2], " As ", "\tReturn: ")
+        strExtr = Replace(strExtr, "''", "\tDescription: ")
+
+        If InStr(strExtr, "\tReturn: ") > 0 Then
+          intDesc = InStr(strExtr, "\tReturn: ")
+          If intRetn > 0 Then
+            strDesc = String.Mid(strExtr, intRetn + 9)
+          Endif
+        Else
+          strRetn = ""
+        Endif
+
+        If InStr(strExtr, "\tDescription: ") > 0 Then
+          intDesc = InStr(strExtr, "\tDescription: ")
+          If intDesc > 0 Then
+            strDesc = String.Mid(strExtr, intDesc + 14)
+          Endif
+        Else
+          strDesc = ""
+        Endif
+
+    End Select
+  Next
+
+  stxMethd.Add(strFast) '
+  stxMethd.Add(strMode) '
+  stxMethd.Add(strScope) '
+  stxMethd.Add(strType) '
+  stxMethd.Add(strName) '
+  stxMethd.Add(Replace(stxArgs.Join("/"), "~", " As "))
+  stxMethd.Add(strRetn) '
+  stxMethd.Add(strDesc) '
+
+  Return stxMethd
+
+End
+
+Public Function RelationProj(stxClass As String[], stxMet As String[], stxCod As String[]) As String[] ''Lee las matrices de métodos y código del proyecto para luego analizar las relaciones entre estos generando una matrix con estas relaciones.
+
+  Dim stxReltn As New String[] ' Lista de métodos
+  Dim intCod As Integer
+  Dim intMet As Integer
+
+  For intCod = 0 To stxCod.Max
+    'Print "// " & stxClass[intCod] & "." & stxMet[intCod]
+
+    For intMet = 0 To stxMet.Max
+
+      Select stxClass[intMet] = stxClass[intCod]
+        Case True
+
+          If InStr(stxCod[intCod], stxMet[intMet] & "(") > 0 Then
+            stxReltn.Add(stxClass[intCod] & "." & stxMet[intCod] & "\t" & stxClass[intMet] & "." & stxMet[intMet])
+          Else
+            stxReltn.Add(stxClass[intMet] & "." & stxMet[intMet])
+          Endif
+        Case False
+
+          If InStr(stxCod[intCod], stxClass[intMet] & "." & stxMet[intMet] & "(") > 0 Then
+            stxReltn.Add(stxClass[intCod] & "." & stxMet[intCod] & "\t" & stxClass[intMet] & "." & stxMet[intMet])
+          Else
+            stxReltn.Add(stxClass[intMet] & "." & stxMet[intMet])
+          Endif
+      End Select
+
+    Next
+  Next
+
+  Return stxReltn
+
+End
+
+Public Function FileVersion(strInputPath As String) As String ''Devuelve un texto con la versión del archivo que se le pasa como ruta. Usa el comando file de la terminal.
+
+  Dim strVersion As String
+
+  If InStr(strInputPath, "'") Then
+    strInputPath = Replace(strInputPath, "'", "'\\''")
+  Endif
+
+  Shell "file '" & strInputPath & "'" To strVersion
+
+  If InStr(strVersion, ":") <> 0 Then
+    strVersion = Replace(strVersion, ": ", ":")
+    strVersion = Split(strVersion, ":")[1]
+    strVersion = ArrangePath(strVersion)
+  Endif
+
+  Return strVersion
+
+End
+
+Public Function FileLoad(strPath As String) As String[] ''Devuelve una matriz de texto donde cada ítem es un renglón del archivo de texto. Si el renglón esta vacio en el archivo de texto, es decir se trata de unallinea vacia, esta no se pasa a la martiz, por lo tanto el resultado es un retorno sin lineaas en blanco.
+
+  Dim strList As String
+  Dim stxListTmp As New String[]
+  Dim stxList As New String[]
+  Dim intList As Integer
+
+  stxList.Clear
+
+  If Exist(strPath) Then
+
+    strList = File.Load(strPath)
+
+    If InStr(strList, "\n") > -1 Then
+      stxListTmp = Split(strList, "\n")
+    Else
+      If String.Len(strList) > 0 Then
+        stxListTmp.Add(strList)
+      Endif
+    Endif
+
+    For intList = 0 To stxListTmp.Max
+      If stxListTmp[intList] <> "" Then
+        stxList.Add(stxListTmp[intList])
+      Endif
+    Next
+  Endif
+
+  Return stxList
+
+End
+
+Public Function FileLoadRaw(strPath As String) As String[] ''Devuelve una matriz de texto donde cada ítem es un renglón del archivo de texto.
+
+  Dim strList As String
+  Dim stxList As New String[]
+
+  stxList.Clear
+
+  If Exist(strPath) Then
+
+    strList = File.Load(strPath)
+
+    If InStr(strList, "\n") > -1 Then
+      stxList = Split(strList, "\n")
+    Else
+      If String.Len(strList) > 0 Then
+        stxList.Add(strList)
+      Endif
+    Endif
+  Endif
+
+  Return stxList
+
+End
+
+Public Function FileLog(strPath As String, strMsg As String) As String ''Agrega un la fecha actual y un texto que se pasa como parametro a un archivo log que tambien se pasa como parametro.
+
+  Dim strText As String
+
+  If strMsg <> "" Then
+    If Exist(strPath) Then
+      strText = File.Load(strPath)
+    Else
+      strText = ""
+    End If
+    strText = GEFUtility.Timestamp(Now()) & " " & strMsg & "\n" & strText
+    File.Save(strPath, strText)
+    Return strPath
+  Else
+    Return ""
+  Endif
+
+End
+
+Public Function FileTemplate(strFileSeed As String, strFileProduct As String, stxTag As String[], stxDat As String[]) As String[] ''Tomando un archivo template reemplaza las etiquetas por valores. Retorna una matriz con una lista de archivos, primero el producto y luego el pdf, en cas que alguno de estos no exista en la posicion de la matriz hara una cadena vacia.
+
+  Dim strTextProduct As String
+  Dim intN As Integer
+  Dim strFilePdf As String
+  'Dim prsTemp As Process
+  Dim stxFilesOutput As New String[]
+  Dim strFileSvg As String
+
+  strFilePdf = File.Dir(strFileProduct) &/ File.BaseName(strFileProduct) & ".pdf"
+  strFileSvg = File.Dir(strFileProduct) &/ File.BaseName(strFileProduct) & ".svg"
+
+  If Exist(strFileSeed) = True Then
+    strTextProduct = File.Load(strFileSeed)
+
+    If strTextProduct <> "" Then
+      For intN = 0 To stxTag.Max
+
+        strTextProduct = Replace(strTextProduct, stxTag[intN], stxDat[intN])
+
+      Next
+
+      If Exist(strFileProduct) Then
+        Kill strFileProduct
+      Endif
+
+      If Exist(strFilePdf) Then
+        Kill strFilePdf
+      Endif
+      Wait 0.1
+
+      File.Save(strFileProduct, strTextProduct)
+
+      Wait 0.1
+
+      'Shell "dia " & strFileProduct & " -e " & strFileSvg Wait
+      Shell "dia " & strFileProduct & " -e " & strFilePdf Wait
+      'Shell "convert " & strFileSvg & " " & strFilePdf Wait
+
+    Endif
+
+  Endif
+
+  If Exist(strFileProduct) = True Then
+    stxFilesOutput.Add(strFileProduct)
+  Else
+    stxFilesOutput.Add("")
+  Endif
+
+  If Exist(strFileSvg) = True Then
+    stxFilesOutput.Add(strFileSvg)
+  Else
+    stxFilesOutput.Add("")
+  Endif
+
+  If Exist(strFilePdf) = True Then
+    stxFilesOutput.Add(strFilePdf)
+  Else
+    stxFilesOutput.Add("")
+  Endif
+
+  Return stxFilesOutput
+
+End
+
+Public Function ArrangePath(strPathRaw As String) As String ''Devuelve una ruta sin los saltos del línea ni caracteres problemáticos
+
+  Dim strPath As String
+
+  strPath = Replace(strPathRaw, "file://", "")
+  strPath = Replace(strPath, "\n", "")
+  strPath = Replace(strPath, "\r", "")
+  strPath = Replace(strPath, "\x00", "")
+
+  Return strPath
+
+End
+
+Public Function Timestamp(datTime As Date) As String ''Retorna una cadena de texto con el tiempo en formato "yyyymmddhhnnss". Desde años a segundos.
+
+  Return Format(datTime, "yyyymmddhhnnss")
+
+End
+
+Public Function FileInfo(strFilePath As String) As Collection ''Devuelve una matriz con datos del archivo que se le pasa como ruta.
+
+  Dim ctnFileMeta As New Collection
+  Dim strFileDir As String
+  Dim strFileName As String
+  Dim strFileExt As String
+  Dim strFileBase As String
+  Dim strFileSize As String
+  Dim strFileTime As String
+  Dim strFileVersion As String
+  Dim strSep As String
+
+  strFilePath = ArrangePath(strFilePath)
+  strSep = "\t"
+
+  If Stat(strFilePath).Type = gb.File Then
+    ' Informacion básica para todo tipo de archivo
+
+    ctnFileMeta.Add(strFilePath, "FilePath")
+
+    strFileDir = File.Dir(strFilePath)
+    ctnFileMeta.Add(strFileDir, "FileDirectory")
+
+    strFileName = File.Name(strFilePath)
+    ctnFileMeta.Add(strFileName, "FileName")
+
+    strFileExt = File.Ext(strFilePath)
+    ctnFileMeta.Add(strFileExt, "FileExt")
+
+    strFileBase = File.BaseName(strFilePath)
+    ctnFileMeta.Add(strFileBase, "FileBase")
+
+    strFileSize = Stat(strFilePath).Size
+    ctnFileMeta.Add(strFileSize, "FileSize")
+
+    strFileTime = GEFUtility.Timestamp(Stat(strFilePath).Time)
+    strFileTime = Replace(strFileTime, ":", ".")
+    ctnFileMeta.Add(strFileTime, "FileTime")
+
+    strFileVersion = GEFutility.FileVersion(strFilePath)
+    strFileVersion = Replace(strFileVersion, ":", ".")
+    ctnFileMeta.Add(strFileVersion, "FileVersion")
+
+  Endif
+
+  Return ctnFileMeta
+
+End
